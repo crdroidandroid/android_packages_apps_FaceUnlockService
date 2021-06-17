@@ -40,7 +40,7 @@ public class CameraUtil {
                 characteristics = cameraManager.getCameraCharacteristics(cameraId);
                 cameraOrientation = characteristics.get(CameraCharacteristics.LENS_FACING);
                 if (cameraOrientation == CameraCharacteristics.LENS_FACING_FRONT) {
-                    return Integer.parseInt(cameraId);
+                    return i;
                 }
 
             }
