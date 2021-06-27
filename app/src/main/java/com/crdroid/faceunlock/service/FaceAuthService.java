@@ -2,7 +2,6 @@ package com.crdroid.faceunlock.service;
 
 import static android.hardware.biometrics.BiometricConstants.*;
 
-import android.annotation.NonNull;
 import android.app.AlarmManager;
 import android.app.PendingIntent;
 import android.app.Service;
@@ -11,7 +10,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.hardware.Camera;
-import android.hardware.camera2.CameraManager;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.IBinder;
@@ -29,7 +27,6 @@ import com.android.internal.util.custom.faceunlock.IFaceServiceReceiver;
 import com.crdroid.faceunlock.AppConstants;
 import com.crdroid.faceunlock.camera.CameraFaceAuthController;
 import com.crdroid.faceunlock.camera.CameraFaceEnrollController;
-import com.crdroid.faceunlock.camera.CameraUtil;
 import com.crdroid.faceunlock.util.NotificationUtils;
 import com.crdroid.faceunlock.util.SharedUtil;
 import com.crdroid.faceunlock.util.Util;
@@ -69,9 +66,6 @@ public class FaceAuthService extends Service {
     private FaceAuthServiceWrapper mService;
     private SharedUtil mShareUtil;
     private boolean mUserUnlocked = false;
-    private boolean mIsAuthenticated = false;
-    private int mFrontCamId = 0;
-    private CameraManager mCameraManager;
     private final BroadcastReceiver mReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -100,25 +94,6 @@ public class FaceAuthService extends Service {
         }
     };
     private int mUserId;
-
-    private CameraManager.AvailabilityCallback mCameraAvailabilityCallback =
-        new CameraManager.AvailabilityCallback() {
-            @Override
-            public void onCameraAvailable(@NonNull String cameraId) {
-                super.onCameraAvailable(cameraId);
-                if (mFrontCamId == Integer.parseInt(cameraId) && mIsAuthenticated) {
-                    mCameraManager.unregisterAvailabilityCallback(this);
-                    mIsAuthenticated = false;
-                    onAuthenticated();
-                }
-            }
-
-            @Override
-            public void onCameraUnavailable(@NonNull String cameraId) {
-                super.onCameraUnavailable(cameraId);
-            }
-    };
-
     private final CameraFaceAuthController.ServiceCallback mCameraAuthControllerCallback = new CameraFaceAuthController.ServiceCallback() {
 
         @Override
@@ -131,14 +106,19 @@ public class FaceAuthService extends Service {
             if (Util.DEBUG) {
                 Log.d(TAG, "handleData result = " + compare + " run: fake = " + iArr[0] + ", low = " + iArr[1] + ", compare score:" + iArr[2] + " live score:" + (((double) iArr[3]) / 100.0d));
             }
-            synchronized (this) {
-                if (mCameraAuthController == null) {
-                    return -1;
+            try {
+                synchronized (this) {
+                    if (mCameraAuthController == null) {
+                        return -1;
+                    }
+                    if (compare == 0) {
+                        mFaceReceiver.onAuthenticated(mShareUtil.getIntValueByKey(AppConstants.SHARED_KEY_FACE_ID), mUserId, mShareUtil.getByteArrayValueByKey(AppConstants.SHARED_KEY_ENROLL_TOKEN));
+                        resetLockoutCount();
+                        stopAuthrate();
+                    }
                 }
-                if (compare == 0) {
-                    mIsAuthenticated = true;
-                    mCameraAuthController.stop();
-                }
+            } catch (RemoteException e) {
+                e.printStackTrace();
             }
             return compare;
         }
@@ -274,8 +254,6 @@ public class FaceAuthService extends Service {
         if (Util.DEBUG) {
             Log.i(TAG, "onCreate start");
         }
-        mCameraManager = getSystemService(CameraManager.class);
-        mFrontCamId = CameraUtil.getFrontFacingCameraId(this);
         mService = new FaceAuthServiceWrapper();
         HandlerThread handlerThread = new HandlerThread(TAG, -2);
         handlerThread.start();
@@ -309,16 +287,6 @@ public class FaceAuthService extends Service {
         }
         mFaceAuth.release();
         unregisterReceiver(mReceiver);
-    }
-
-    private void onAuthenticated(){
-        try {
-            mFaceReceiver.onAuthenticated(mShareUtil.getIntValueByKey(AppConstants.SHARED_KEY_FACE_ID), mUserId, mShareUtil.getByteArrayValueByKey(AppConstants.SHARED_KEY_ENROLL_TOKEN));
-            resetLockoutCount();
-            stopAuthrate();
-        } catch (RemoteException e) {
-            e.printStackTrace();
-        }
     }
 
     private void stopEnroll() {
@@ -516,7 +484,6 @@ public class FaceAuthService extends Service {
 
         @Override
         public void authenticate(long j) {
-            mCameraManager.registerAvailabilityCallback(mCameraAvailabilityCallback, mWorkHandler);
             if (Util.DEBUG) {
                 Log.d(FaceAuthService.TAG, "authenticate");
             }
