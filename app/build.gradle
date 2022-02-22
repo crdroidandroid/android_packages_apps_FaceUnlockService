@@ -10,7 +10,7 @@ android {
     compileSdkVersion 31
 
     defaultConfig {
-        applicationId "org.pixelexperience.faceunlock"
+        applicationId "com.crdroid.faceunlock"
         minSdkVersion 31
         targetSdkVersion 31
         versionCode 1
