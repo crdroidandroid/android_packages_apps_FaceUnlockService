@@ -44,7 +44,7 @@ public class CameraUtil {
                 }
 
             }
-        } catch (CameraAccessException e) {
+        } catch (Exception e) {
             e.printStackTrace();
         }
         return -1;
